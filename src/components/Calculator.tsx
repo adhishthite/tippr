@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   calculateTip,
   calculateTotal,
@@ -26,43 +26,82 @@ export default function Calculator() {
   const [roundEnabled, setRoundEnabled] = useState<boolean>(false);
   const [roundMode, setRoundMode] = useState<RoundMode>("up");
 
-  // Warnings
+  // Warnings and errors
   const [largeAmountWarning, setLargeAmountWarning] = useState<boolean>(false);
   const [previousBill, setPreviousBill] = useState<number>(0);
+  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [drasticChangeWarning, setDrasticChangeWarning] =
+    useState<boolean>(false);
 
   // Calculations
   const tipAmount = calculateTip(billAmount, tipPercent);
   const subtotal = calculateTotal(billAmount, tipAmount);
-  const finalTotal = roundEnabled ? applyRounding(subtotal, roundMode) : subtotal;
-  const splitResult = splitEnabled ? calculateSplit(finalTotal, splitCount) : null;
+  const finalTotal = roundEnabled
+    ? applyRounding(subtotal, roundMode)
+    : subtotal;
+  const splitResult = splitEnabled
+    ? calculateSplit(finalTotal, splitCount)
+    : null;
 
   // Handle bill amount changes
   const handleBillChange = (value: string) => {
-    setBillInput(value);
+    // Strip all non-numeric chars except first decimal point
+    let cleanedInput = value.replace(/[^\d.]/g, "");
 
-    const validation = validateBillAmount(value);
-    if (validation.isValid) {
-      // Check for drastic changes if split is enabled
-      if (
-        splitEnabled &&
-        previousBill > 0 &&
-        Math.abs(validation.sanitized - previousBill) > previousBill * 0.5
-      ) {
-        // Significant change detected
-        setLargeAmountWarning(true);
-      }
+    // Only allow one decimal point - keep the first one
+    const firstDecimalIndex = cleanedInput.indexOf(".");
+    if (firstDecimalIndex !== -1) {
+      cleanedInput =
+        cleanedInput.slice(0, firstDecimalIndex + 1) +
+        cleanedInput.slice(firstDecimalIndex + 1).replace(/\./g, "");
+    }
 
-      setBillAmount(validation.sanitized);
-      setPreviousBill(validation.sanitized);
+    // Add leading zero for decimal-first input (.99 → 0.99)
+    if (cleanedInput.startsWith(".")) {
+      cleanedInput = "0" + cleanedInput;
+    }
 
-      // Show warning for large amounts
-      if (validation.warning) {
-        setLargeAmountWarning(true);
-      } else {
-        setLargeAmountWarning(false);
-      }
-    } else {
+    setBillInput(cleanedInput);
+
+    const validation = validateBillAmount(cleanedInput);
+
+    // Handle errors (CC number, invalid input, etc.)
+    if (!validation.isValid) {
+      setErrorMessage(validation.error || "Invalid input");
       setBillAmount(0);
+      setLargeAmountWarning(false);
+      setDrasticChangeWarning(false);
+      return;
+    }
+
+    // Clear error on valid input
+    setErrorMessage("");
+
+    // Check for drastic changes if split is enabled
+    if (
+      splitEnabled &&
+      previousBill > 0 &&
+      validation.sanitized > 0 &&
+      Math.abs(validation.sanitized - previousBill) > previousBill * 0.5
+    ) {
+      // Significant change detected
+      setDrasticChangeWarning(true);
+    } else {
+      setDrasticChangeWarning(false);
+    }
+
+    setBillAmount(validation.sanitized);
+
+    // Only update previousBill for non-zero amounts
+    if (validation.sanitized > 0) {
+      setPreviousBill(validation.sanitized);
+    }
+
+    // Show warning for large amounts
+    if (validation.warning) {
+      setLargeAmountWarning(true);
+    } else {
+      setLargeAmountWarning(false);
     }
   };
 
@@ -82,7 +121,10 @@ export default function Calculator() {
       <div className="w-full max-w-2xl space-y-12">
         {/* Bill Amount Input */}
         <div className="space-y-4">
-          <label htmlFor="bill" className="block text-sm uppercase tracking-wider text-neutral-600">
+          <label
+            htmlFor="bill"
+            className="block text-sm uppercase tracking-wider text-neutral-600"
+          >
             Bill Amount
           </label>
           <div className="relative">
@@ -99,9 +141,18 @@ export default function Calculator() {
               className="w-full pl-12 text-6xl font-light text-neutral-800 bg-transparent border-b-2 border-neutral-200 focus:border-neutral-800 focus:outline-none transition-colors placeholder:text-neutral-300"
             />
           </div>
-          {largeAmountWarning && billAmount > 10000 && (
-            <p className="text-sm text-neutral-500">
+          {errorMessage && (
+            <p className="text-sm text-red-500">{errorMessage}</p>
+          )}
+          {largeAmountWarning && billAmount > 10000 && !errorMessage && (
+            <p className="text-sm text-amber-600">
               That&apos;s a large amount - {formatWithSeparators(billAmount)}
+            </p>
+          )}
+          {drasticChangeWarning && splitEnabled && !errorMessage && (
+            <p className="text-sm text-amber-600">
+              Amount changed significantly. Still splitting between {splitCount}
+              ?
             </p>
           )}
         </div>
@@ -114,7 +165,9 @@ export default function Calculator() {
           />
         ) : (
           <div className="text-center py-8">
-            <p className="text-neutral-400">Enter your bill amount to calculate tip</p>
+            <p className="text-neutral-400">
+              Enter your bill amount to calculate tip
+            </p>
           </div>
         )}
 

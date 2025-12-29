@@ -16,6 +16,7 @@ export default function TipSelector({
 }: TipSelectorProps) {
   const [customInput, setCustomInput] = useState<string>("");
   const [showCustom, setShowCustom] = useState<boolean>(false);
+  const [tipWarning, setTipWarning] = useState<string>("");
 
   const isPresetSelected = PRESET_PERCENTAGES.includes(selectedPercent);
 
@@ -23,6 +24,7 @@ export default function TipSelector({
     onPercentChange(percent);
     setShowCustom(false);
     setCustomInput("");
+    setTipWarning("");
   };
 
   const handleCustomClick = () => {
@@ -31,12 +33,36 @@ export default function TipSelector({
 
   const handleCustomChange = (value: string) => {
     // Block non-numeric characters during typing
-    const cleaned = value.replace(/[^\d.]/g, "");
+    let cleaned = value.replace(/[^\d.]/g, "");
+
+    // Only allow one decimal point - keep the first one
+    const firstDecimalIndex = cleaned.indexOf(".");
+    if (firstDecimalIndex !== -1) {
+      cleaned =
+        cleaned.slice(0, firstDecimalIndex + 1) +
+        cleaned.slice(firstDecimalIndex + 1).replace(/\./g, "");
+    }
+
+    // Add leading zero for decimal-first input (.5 → 0.5)
+    if (cleaned.startsWith(".")) {
+      cleaned = "0" + cleaned;
+    }
+
     setCustomInput(cleaned);
 
     const validation = validateTipPercent(cleaned);
     if (validation.isValid && validation.sanitized > 0) {
       onPercentChange(validation.sanitized);
+
+      // Show warning if capped
+      if (validation.capped) {
+        setTipWarning(validation.warning || "Maximum tip is 100%");
+        setCustomInput("100");
+      } else {
+        setTipWarning("");
+      }
+    } else {
+      setTipWarning("");
     }
   };
 
@@ -95,6 +121,7 @@ export default function TipSelector({
           </div>
         )}
       </div>
+      {tipWarning && <p className="text-sm text-amber-600">{tipWarning}</p>}
     </div>
   );
 }

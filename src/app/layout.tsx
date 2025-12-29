@@ -14,7 +14,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Tippr - Ultra-minimal Tip Calculator",
-  description: "Fast, sleek, reliable tip calculator with bill splitting and rounding",
+  description:
+    "Fast, sleek, reliable tip calculator with bill splitting and rounding",
 };
 
 export default function RootLayout({

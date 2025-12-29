@@ -19,10 +19,7 @@ export function formatCurrency(value: number): number {
  * @param tipPercent - Tip percentage (15 = 15%)
  * @returns Tip amount formatted to 2 decimals
  */
-export function calculateTip(
-  billAmount: number,
-  tipPercent: number
-): number {
+export function calculateTip(billAmount: number, tipPercent: number): number {
   if (billAmount <= 0 || tipPercent < 0) return 0;
   const tipAmount = billAmount * (tipPercent / 100);
   return formatCurrency(tipAmount);
@@ -34,10 +31,7 @@ export function calculateTip(
  * @param tipAmount - The calculated tip amount
  * @returns Total formatted to 2 decimals
  */
-export function calculateTotal(
-  billAmount: number,
-  tipAmount: number
-): number {
+export function calculateTotal(billAmount: number, tipAmount: number): number {
   return formatCurrency(billAmount + tipAmount);
 }
 
@@ -101,26 +95,60 @@ export function calculateSplit(
 
 /**
  * Validates bill amount input
- * Blocks negative values, handles large amounts
+ * Blocks negative values, handles large amounts, detects CC numbers
  * @param value - Input value to validate
- * @returns Validation result with sanitized value and warnings
+ * @returns Validation result with sanitized value, warnings, and errors
  */
 export function validateBillAmount(value: string): {
   isValid: boolean;
   sanitized: number;
   warning?: string;
+  error?: string;
 } {
+  // Handle empty input
+  if (!value || value.trim() === "") {
+    return {
+      isValid: true,
+      sanitized: 0,
+    };
+  }
+
   // Remove non-numeric characters except decimal point
   const cleaned = value.replace(/[^\d.]/g, "");
 
+  // Handle multiple decimal points - only keep first one
+  const parts = cleaned.split(".");
+  const normalizedValue =
+    parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : cleaned;
+
+  // Detect credit card numbers (13-19 consecutive digits, no decimal)
+  const digitsOnly = value.replace(/[^\d]/g, "");
+  if (digitsOnly.length >= 13 && !value.includes(".")) {
+    return {
+      isValid: false,
+      sanitized: 0,
+      error: "Please enter a valid bill amount",
+    };
+  }
+
   // Parse as number
-  const num = parseFloat(cleaned);
+  const num = parseFloat(normalizedValue);
 
   // Check for invalid number
   if (isNaN(num) || num < 0) {
     return {
       isValid: false,
       sanitized: 0,
+      error: "Please enter a valid bill amount",
+    };
+  }
+
+  // Reject unreasonably large amounts (over $1 million - likely a mistake)
+  if (num > 1000000) {
+    return {
+      isValid: false,
+      sanitized: 0,
+      error: "Please enter a valid bill amount",
     };
   }
 
@@ -141,25 +169,42 @@ export function validateBillAmount(value: string): {
 
 /**
  * Validates tip percentage input
- * Ensures numeric input only
+ * Ensures numeric input only, caps at 100%
  * @param value - Input value to validate
- * @returns Validation result with sanitized value
+ * @returns Validation result with sanitized value and warning
  */
 export function validateTipPercent(value: string): {
   isValid: boolean;
   sanitized: number;
+  warning?: string;
+  capped?: boolean;
 } {
   // Remove non-numeric characters except decimal point
   const cleaned = value.replace(/[^\d.]/g, "");
 
+  // Handle multiple decimal points
+  const parts = cleaned.split(".");
+  const normalizedValue =
+    parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : cleaned;
+
   // Parse as number
-  const num = parseFloat(cleaned);
+  const num = parseFloat(normalizedValue);
 
   // Check for invalid number or negative
   if (isNaN(num) || num < 0) {
     return {
       isValid: false,
       sanitized: 0,
+    };
+  }
+
+  // Cap at 100% maximum
+  if (num > 100) {
+    return {
+      isValid: true,
+      sanitized: 100,
+      warning: "Maximum tip is 100%",
+      capped: true,
     };
   }
 
